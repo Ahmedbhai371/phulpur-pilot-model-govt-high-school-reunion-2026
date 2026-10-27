@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="bn"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>পুনর্মিলনী ২০২৬ | অ্যাডমিন</title>
+<style>
+:root{font-family:system-ui,"Noto Sans Bengali",sans-serif;color-scheme:light dark;--green:#087443;--gold:#f2c94c}
+*{box-sizing:border-box}body{margin:0;background:light-dark(#f2f7ef,#101a14);color:light-dark(#173b2a,#edf5ee)}
+header{background:linear-gradient(120deg,#087443,#064b31);color:#fff;padding:26px 18px}header div,main{max-width:1100px;margin:auto}h1{margin:0 0 5px;font-size:clamp(24px,4vw,38px)}main{padding:22px 16px 50px}.panel{background:light-dark(#fff,#19251e);border:1px solid light-dark(#dce8d9,#33463a);border-radius:16px;padding:18px;margin:0 0 18px;overflow:auto}
+input,button{font:inherit;padding:11px 12px;border-radius:9px;border:1px solid #9aafa0}input{width:100%;max-width:360px;background:transparent;color:inherit}button{background:var(--green);color:white;font-weight:700;cursor:pointer;border:0}button.secondary{background:transparent;color:inherit;border:1px solid #9aafa0}form{display:flex;gap:10px;flex-wrap:wrap;align-items:center}table{width:100%;border-collapse:collapse;min-width:780px}th,td{text-align:left;padding:10px;border-bottom:1px solid light-dark(#dce8d9,#33463a);font-size:13px}th{background:light-dark(#f2f7ef,#223329)}.muted{opacity:.7;font-size:13px}.status{padding:10px;background:light-dark(#f5f8ef,#25362a);border-radius:9px;margin-top:12px}.hidden{display:none!important}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script></head>
+<body><header><div><div>PHULPUR • REUNION 2026</div><h1>রেজিস্ট্রেশন অ্যাডমিন প্যানেল</h1><div>শুধুমাত্র অনুমোদিত আয়োজকদের জন্য</div></div></header>
+<main>
+<section class="panel"><h2>অ্যাডমিন লগইন</h2><p class="muted">Supabase Auth-এ তৈরি এবং app_metadata.role = "admin" দেওয়া অ্যাকাউন্ট ব্যবহার করুন।</p>
+<form id="login"><input id="project" placeholder="Supabase Project URL" required type="url"><input id="pubkey" placeholder="Supabase publishable/anon key" required><input id="email" placeholder="অ্যাডমিন ইমেইল" required type="email"><input id="password" placeholder="পাসওয়ার্ড" required type="password"><button>লগইন</button></form><div id="status" class="status" role="status">প্রথমে Supabase URL, publishable key এবং অ্যাডমিন লগইন দিন।</div></section>
+<section id="dashboard" class="panel hidden"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap"><h2>রেজিস্ট্রেশন তালিকা</h2><div><button id="refresh" type="button">রিফ্রেশ</button> <button id="export" type="button" class="secondary">CSV ডাউনলোড</button> <button id="logout" type="button" class="secondary">লগআউট</button></div></div>
+<p class="muted">ব্যক্তিগত তথ্য সুরক্ষিত রাখুন। শুধু প্রয়োজনীয় আয়োজকদের অ্যাক্সেস দিন।</p><div id="stats"></div><div style="overflow:auto"><table><thead><tr><th>আইডি</th><th>তারিখ</th><th>নাম</th><th>ব্যাচ</th><th>মোবাইল</th><th>অংশগ্রহণকারী</th><th>ফি</th><th>পেমেন্ট</th><th>স্ট্যাটাস</th></tr></thead><tbody id="rows"></tbody></table></div></section>
+</main>
+<script>
+let client=null, accessToken=null, records=[];
+const $=id=>document.getElementById(id);
+function status(t){$('status').textContent=t}
+$('login').addEventListener('submit',async e=>{e.preventDefault();try{
+ client=window.supabase.createClient($('project').value.trim(),$('pubkey').value.trim());
+ const {data,error}=await client.auth.signInWithPassword({email:$('email').value.trim(),password:$('password').value});
+ if(error)throw error;accessToken=data.session.access_token;
+ const role=data.user.app_metadata?.role;if(role!=='admin'){await client.auth.signOut();throw new Error('এই অ্যাকাউন্টে admin role নেই। Supabase থেকে role=admin সেট করুন।')}
+ $('dashboard').classList.remove('hidden');status('লগইন সফল। ডেটা লোড হচ্ছে…');await load();
+}catch(err){status('লগইন ব্যর্থ: '+err.message)}});
+async function load(){const r=await fetch('/api/admin/registrations',{headers:{Authorization:'Bearer '+accessToken}});const d=await r.json();if(!r.ok)throw new Error(d.error||'ডেটা লোড হয়নি');records=d.registrations||[];
+ $('rows').innerHTML=records.map(x=>`<tr><td>${esc(x.id)}</td><td>${esc(x.created_at?.slice(0,10))}</td><td>${esc(x.name)}</td><td>${esc(x.batch)}</td><td>${esc(x.phone)}</td><td>${esc(x.participant_count)}</td><td>৳ ${esc(x.total_amount)}</td><td>${esc(x.payment_method)}</td><td>${esc(x.payment_status)}</td></tr>`).join('');
+ $('stats').textContent=`মোট রেজিস্ট্রেশন: ${records.length} | পেমেন্ট সম্পন্ন: ${records.filter(x=>x.payment_status==='paid').length} | মোট সংগৃহীত: ৳ ${records.filter(x=>x.payment_status==='paid').reduce((a,x)=>a+Number(x.total_amount||0),0)}`;
+ status('ডেটা আপডেট হয়েছে।')}
+function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+$('refresh').onclick=()=>load().catch(e=>status(e.message));
+$('logout').onclick=async()=>{await client?.auth.signOut();accessToken=null;records=[];$('dashboard').classList.add('hidden');status('লগআউট করা হয়েছে।')};
+$('export').onclick=()=>{const cols=['id','created_at','name','batch','phone','participant_count','total_amount','payment_method','payment_status'];const csv=[cols.join(','),...records.map(r=>cols.map(k=>'"'+String(r[k]??'').replace(/"/g,'""')+'"').join(','))].join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));a.download='phulpur-reunion-registrations.csv';a.click();URL.revokeObjectURL(a.href)};
+</script></body></html>
